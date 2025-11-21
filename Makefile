@@ -22,6 +22,6 @@ recon3d:
 	@$(PY) scripts/build_W3D.py --pairs build/outputs/pairs.csv --rays build/outputs/rays.csv --grid3d $(GRID3D) --outW W3D_coo.npz --outy y_theta2_3d.npy
 	@$(PY) scripts/recon_mlem3d.py --iters $(ITERS)
 	@$(PY) scripts/render_recon3d_png.py
-	@$(PY) scripts/render_recon3d_view.py --view side --out recon3d_side.png
+	@$(PY) scripts/render_recon3d_view.py --view side --out build/outputs/recon3d_side.png
 
 full3d: run recon3d

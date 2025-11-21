@@ -1,149 +1,193 @@
 #!/usr/bin/env python3
-import argparse, sys, pathlib
-import numpy as np
+import argparse, yaml, numpy as np
+import sys
+from pathlib import Path
+
+# matplotlib は3D描画を使う
+import matplotlib
+matplotlib.use("Agg")  # 画面なし保存
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from skimage.measure import marching_cubes
-from pathlib import Path
+from skimage.filters import threshold_otsu
 
-def load_vol(path):
-  return np.load(path)
+# --- パス解決（どこで実行しても build/outputs に出す） ---
+def resolve_build():
+  p = Path.cwd()
+  for d in [p] + list(p.parents):
+    if d.name == "build": return d
+    if (d / "build").exists(): return d / "build"
+  return Path("build")
+def out_path(name: str) -> Path:
+  b = resolve_build(); o = b / "outputs"; o.mkdir(parents=True, exist_ok=True)
+  return o / name
 
-def load_grid(gpath):
-  import yaml
-  with open(gpath) as f:
-    return yaml.safe_load(f)
+# --- 体積→2段の等値面（青の全体、赤の高値） ---
+def make_isos(vol, spacing, level_low=None, level_hi=None):
+  vv = vol.astype(np.float32)
+  pos = vv[vv>0]
+  if pos.size == 0:
+    # マスクによって全てゼロになった可能性があるため、エラーではなく警告にする
+    print("[WARN] volume is empty (all zeros) after masking.", file=sys.stderr)
+    return (None, None), (None, None), (0.0, 0.0)
+    
+  if level_low is None:
+    try:
+      # Otsuの閾値はノイズに敏感なため、警告時に安全なパーセンタイルに戻る
+      level_low = float(threshold_otsu(pos))
+    except Exception:
+      level_low = float(np.percentile(pos, 75))  # 75% タイル
+  if level_hi is None:
+    level_hi = float(np.percentile(pos, 95))     # 95% タイル（“鉛候補”）
+  
+  if level_hi < level_low:
+    level_hi = level_low * 1.05  # hi を low より少し上にする
 
-def draw_plate(ax, z, x_min, x_max, y_min, y_max, color, alpha=0.25):
-  X = [x_min, x_max, x_max, x_min]
-  Y = [y_min, y_min, y_max, y_max]
-  Z = [z, z, z, z]
-  verts = [list(zip(X, Y, Z))]
-  pc = Poly3DCollection([verts[0]], alpha=alpha, facecolor=color, edgecolor='k', linewidths=0.3)
-  ax.add_collection3d(pc)
+  # skimage は (z,y,x) 順・spacing=(dz,dy,dx)
+  try:
+    vertsL, facesL, _, _ = marching_cubes(vv, level=level_low, spacing=spacing)
+  except ValueError:
+    vertsL, facesL = np.array([]), np.array([])
+  
+  try:
+    vertsH, facesH, _, _ = marching_cubes(vv, level=level_hi, spacing=spacing)
+  except ValueError:
+    vertsH, facesH = np.array([]), np.array([])
+
+  return (vertsL, facesL), (vertsH, facesH), (level_low, level_hi)
+
+def add_mesh(ax, verts, faces, color, alpha, origin):
+  if verts.size == 0: return
+  # verts は (z,y,x)。ROI原点 (zmin, ymin, xmin) を加えてから (x,y,z) へ
+  oz, oy, ox = origin  # 注意: originは (zmin, ymin, xmin) の順で受け取る
+  V = np.empty_like(verts)
+  V[:, 0] = verts[:, 2] + ox  # x = x + xmin
+  V[:, 1] = verts[:, 1] + oy  # y = y + ymin
+  V[:, 2] = verts[:, 0] + oz  # z = z + zmin
+  mesh = Poly3DCollection(V[faces], linewidths=0.15, facecolor=color, edgecolor="k", alpha=alpha)
+  ax.add_collection3d(mesh)
+
+def draw_plate(ax, xmin,xmax,ymin,ymax,z, color, alpha=0.25, thick=2.0):
+  # 薄い直方体：z±thick/2
+  z0, z1 = z - thick/2, z + thick/2
+  # 8点
+  P = np.array([
+    [xmin,ymin,z0],[xmax,ymin,z0],[xmax,ymax,z0],[xmin,ymax,z0],
+    [xmin,ymin,z1],[xmax,ymin,z1],[xmax,ymax,z1],[xmin,ymax,z1]
+  ], dtype=float)
+  # 面
+  F = [
+    [0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]
+  ]
+  poly = Poly3DCollection([P[f] for f in F], facecolors=color, edgecolors="k", linewidths=0.3, alpha=alpha)
+  ax.add_collection3d(poly)
 
 def main():
   ap = argparse.ArgumentParser()
   ap.add_argument("--vol", default="build/outputs/recon3d_vol.npy")
   ap.add_argument("--grid3d", default="configs/grid3d.yml")
   ap.add_argument("--pairs", default="build/outputs/pairs.csv")
-  ap.add_argument("--low", type=float, default=None, help="absolute iso low threshold")
-  ap.add_argument("--hi",  type=float, default=None, help="absolute iso high threshold")
-  ap.add_argument("--plow", type=float, default=None, help="percentile for low iso (e.g., 70)")
-  ap.add_argument("--phi",  type=float, default=None, help="percentile for high iso (e.g., 95)")
-  ap.add_argument("--mask-z-mm", type=float, default=0.0, help="zero voxels within this [mm] from z_min/z_max")
-  ap.add_argument("--view", choices=["iso","side","front","top"], default="iso")
-  ap.add_argument("--elev", type=float, default=None)
-  ap.add_argument("--azim", type=float, default=None)
-  ap.add_argument("--dpi", type=int, default=160)
-  ap.add_argument("--out", default="recon3d_view.png")
+  ap.add_argument("--low", type=float, default=None, help="青の等値面レベル（指定なければ自動）")
+  ap.add_argument("--hi",  type=float, default=None, help="赤の等値面レベル（指定なければ自動）")
+  ap.add_argument("--dpi", type=int, default=220)
+  ap.add_argument("--out", default="recon3d_view.png") # 出力ファイル名を view.png に変更
+  
+  # --- _view の機能を追加 ---
+  ap.add_argument("--mask-z-mm", type=float, default=0.0, help="z境界からこの[mm]内のボクセルをゼロにする（アーチファクト抑制）")
+  ap.add_argument("--view", choices=["iso","side","front","top"], default="iso", help="視点プリセット (iso:斜め, side:側面, front:正面, top:上部)")
+  ap.add_argument("--elev", type=float, default=None, help="カメラ仰角 (Elevation)")
+  ap.add_argument("--azim", type=float, default=None, help="カメラ方位角 (Azimuth)")
+  # --- ここまで ---
+  
   args = ap.parse_args()
 
-  V = load_vol(args.vol)  # shape = (nz, ny, nx)
-  g = load_grid(args.grid3d)
-  nx, ny, nz = int(g["nx"]), int(g["ny"]), int(g["nz"])
-  x_min, x_max = float(g["x_min"]), float(g["x_max"])
-  y_min, y_max = float(g["y_min"]), float(g["y_max"])
-  z_min, z_max = float(g["z_min"]), float(g["z_max"])
+  vol = np.load(args.vol)
+  g = yaml.safe_load(Path(args.grid3d).read_text())
+  nx,ny,nz = int(g["nx"]), int(g["ny"]), int(g["nz"])
+  xmin,xmax = float(g["x_min"]), float(g["x_max"])
+  ymin,ymax = float(g["y_min"]), float(g["y_max"])
+  zmin,zmax = float(g["z_min"]), float(g["z_max"])
+  sx = (xmax-xmin)/nx; sy=(ymax-ymin)/ny; sz=(zmax-zmin)/nz
 
-  # Z端の簡易マスク（板近傍アーチファクト抑制）
+  # --- Z端の簡易マスク（板近傍アーチファクト抑制）の適用 ---
   mmm = args.mask_z_mm
-  if mmm and mmm > 0:
-    zc = np.linspace(z_min, z_max, nz, endpoint=False) + (z_max - z_min) / nz * 0.5
-    mask = (zc <= z_min + mmm) | (zc >= z_max - mmm)
-    V[mask, :, :] = 0.0
+  if mmm and mmm > 0.0:
+    # zmin から zmax の間に nz 個のボクセル中心座標を生成
+    zc = np.linspace(zmin, zmax, nz, endpoint=False) + sz * 0.5
+    # マスク条件: z_min + mmm 未満、または z_max - mmm より大きい
+    mask = (zc <= zmin + mmm) | (zc >= zmax - mmm)
+    # マスクされたZスライスを全てゼロにする
+    vol[mask, :, :] = 0.0
+  # --- ここまで ---
 
-  flat = V.ravel()
-  flat_pos = flat[flat > 0]
-  if flat_pos.size == 0:
-    print("[WARN] volume is all zeros after masking; nothing to render", file=sys.stderr)
+  # 等値面生成
+  (vL,fL),(vH,fH),(lvL,lvH) = make_isos(vol, spacing=(sz,sy,sx), level_low=args.low, level_hi=args.hi)
 
-  # しきい値（percentile優先）
-  if args.plow is not None or args.phi is not None:
-    pL = 70.0 if args.plow is None else float(args.plow)
-    pH = 95.0 if args.phi  is None else float(args.phi)
-    low = np.percentile(flat, pL)
-    hi  = np.percentile(flat, pH)
-  else:
-    low = float(args.low) if args.low is not None else (np.percentile(flat, 70.0) if flat_pos.size else 0.0)
-    hi  = float(args.hi)  if args.hi  is not None else (np.percentile(flat, 95.0) if flat_pos.size else (low*1.05 if low>0 else 0.0))
-  if hi < low:
-    hi = low * 1.05
-
-  # --- marching cubes helper ---
-  # skimage の頂点は (z, y, x)。spacing=(dz, dy, dx) を与えた上で、
-  # (x_min, y_min, z_min) を原点補正し (x, y, z) に並べ替える。
-  def mc(level):
-    dz = (z_max - z_min) / nz
-    dy = (y_max - y_min) / ny
-    dx = (x_max - x_min) / nx
-    verts_zyx, faces, _, _ = marching_cubes(V.astype(np.float32), level=level, spacing=(dz, dy, dx))
-    X = verts_zyx[:, 2] + x_min
-    Y = verts_zyx[:, 1] + y_min
-    Z = verts_zyx[:, 0] + z_min
-    verts_xyz = np.column_stack([X, Y, Z])
-    return verts_xyz, faces
-
-  fig = plt.figure(figsize=(7.2, 7.2), dpi=args.dpi)
+  # Top/Bottom の z（中央値）
+  import csv
+  tzs,bzs=[],[]
+  if Path(args.pairs).exists():
+    with open(args.pairs) as f:
+      r=csv.DictReader(f)
+      for row in r:
+        # csv.DictReaderは文字列を返すのでfloatに変換する
+        try:
+          tzs.append(float(row["top_z"])); bzs.append(float(row["bot_z"]))
+        except ValueError:
+          pass # データ欠損があればスキップ
+  
+  # z_top/z_bot の計算は、データが空の場合はz_min/z_maxの付近に設定する
+  z_top = float(np.median(tzs)) if tzs else zmax - 30 # Geant4のデフォルト ±3cm=±30mm を想定
+  z_bot = float(np.median(bzs)) if bzs else zmin + 30
+  
+  # 図
+  fig = plt.figure(figsize=(8,6), dpi=args.dpi)
   ax = fig.add_subplot(111, projection="3d")
 
-  # 等値面（低・高の2段）。ここが“検出器の外に見える”原因だったので mc を修正。
-  try:
-    v1, f1 = mc(low)
-    m1 = Poly3DCollection(v1[f1], alpha=0.30, facecolor='C0', edgecolor='none')
-    ax.add_collection3d(m1)
-  except Exception:
-    pass
-  try:
-    v2, f2 = mc(hi)
-    m2 = Poly3DCollection(v2[f2], alpha=0.80, facecolor='C3', edgecolor='none')
-    ax.add_collection3d(m2)
-  except Exception:
-    pass
+  # メッシュ
+  add_mesh(ax, vL, fL, color=(0.4,0.7,1.0), alpha=0.25, origin=(zmin, ymin, xmin))
+  add_mesh(ax, vH, fH, color=(1.0,0.1,0.1), alpha=0.9,  origin=(zmin, ymin, xmin))
 
-  # プレート（pairs の中央値 z を使う。なければ z_min/z_max 近傍）
-  zt, zb = None, None
-  try:
-    import csv, statistics
-    tz, bz = [], []
-    with open(args.pairs) as f:
-      r = csv.DictReader(f)
-      for i, row in enumerate(r):
-        tz.append(float(row["top_z"])); bz.append(float(row["bot_z"]))
-        if i > 10000: break
-    zt, zb = statistics.median(tz), statistics.median(bz)
-  except Exception:
-    pass
-  if zt is None: zt = z_max - (z_max - z_min) * 0.2
-  if zb is None: zb = z_min + (z_max - z_min) * 0.2
-  draw_plate(ax, zb, x_min, x_max, y_min, y_max, color="tab:red",   alpha=0.25)
-  draw_plate(ax, zt, x_min, x_max, y_min, y_max, color="tab:green", alpha=0.25)
+  # 検出器板
+  draw_plate(ax, xmin,xmax,ymin,ymax, z_top, color=(0.1,1.0,0.1), alpha=0.25, thick=2.0)
+  draw_plate(ax, xmin,xmax,ymin,ymax, z_bot, color=(1.0,0.1,0.1), alpha=0.25, thick=2.0)
 
-  ax.set_xlim(x_min, x_max); ax.set_ylim(y_min, y_max); ax.set_zlim(z_min, z_max)
+  # 軸・範囲
+  ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax); ax.set_zlim(zmin, zmax)
   ax.set_xlabel("X [mm]"); ax.set_ylabel("Y [mm]"); ax.set_zlabel("Z [mm]")
+  ax.set_box_aspect((xmax-xmin, ymax-ymin, zmax-zmin))
 
+  # --- 角度（View Init）の設定 ---
+  elev = args.elev
+  azim = args.azim
+  
   if args.view == "side":
-    ax.view_init(elev=0 if args.elev is None else args.elev,
-                 azim=0 if args.azim is None else args.azim)
+    elev = 0 if elev is None else elev
+    azim = 0 if azim is None else azim
   elif args.view == "front":
-    ax.view_init(elev=0 if args.elev is None else args.elev,
-                 azim=90 if args.azim is None else args.azim)
+    elev = 0 if elev is None else elev
+    azim = 90 if azim is None else azim
   elif args.view == "top":
-    ax.view_init(elev=90 if args.elev is None else args.elev,
-                 azim=0 if args.azim is None else args.azim)
-  else:
-    ax.view_init(elev=25 if args.elev is None else args.elev,
-                 azim=45 if args.azim is None else args.azim)
+    elev = 90 if elev is None else elev
+    azim = 0 if azim is None else azim
+  else: # "iso" (デフォルト)
+    elev = 22 if elev is None else elev
+    azim = -60 if azim is None else azim
 
-  title = f"3D Reconstruction  (low≈{low:.3g}, high≈{hi:.3g})"
+  ax.view_init(elev=elev, azim=azim)
+  # --- ここまで ---
+  
+  # タイトル
+  title = f"3D Reconstruction  (low≈{lvL:.3g}, high≈{lvH:.3g})"
   if args.view != "iso": title += f"  view={args.view}"
-  ax.set_title(title)
+  if args.mask_z_mm > 0.0: title += f" (Z-Mask {args.mask_z_mm}mm)"
+  fig.suptitle(title, y=0.94)
 
+  out = out_path(Path(args.out).name)
   plt.tight_layout()
-  out = args.out  # ← 出力先の仕様は変更しない
-  Path(out).parent.mkdir(parents=True, exist_ok=True)
-  plt.savefig(out, dpi=args.dpi)
-  print(f"[OK] wrote PNG: {Path(out).resolve()}")
+  plt.savefig(out, dpi=args.dpi, bbox_inches="tight")
+  plt.close(fig)
+  print(f"[OK] wrote PNG: {out}")
 
 if __name__ == "__main__":
   sys.exit(main())

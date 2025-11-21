@@ -1,0 +1,3 @@
+top_name: TopPlate
+bot_name: BottomPlate
+policy: first   # または nearest_z

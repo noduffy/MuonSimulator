@@ -23,17 +23,16 @@ def out_path(name: str) -> Path:
   return o / name
 
 # --- 体積→2段の等値面（青の全体、赤の高値） ---
+# level_low/hi に None が渡された場合、内部でデフォルトのパーセンタイルを計算する
 def make_isos(vol, spacing, level_low=None, level_hi=None):
   vv = vol.astype(np.float32)
   pos = vv[vv>0]
   if pos.size == 0:
-    # マスクによって全てゼロになった可能性があるため、エラーではなく警告にする
     print("[WARN] volume is empty (all zeros) after masking.", file=sys.stderr)
     return (None, None), (None, None), (0.0, 0.0)
     
   if level_low is None:
     try:
-      # Otsuの閾値はノイズに敏感なため、警告時に安全なパーセンタイルに戻る
       level_low = float(threshold_otsu(pos))
     except Exception:
       level_low = float(np.percentile(pos, 75))  # 75% タイル
@@ -41,7 +40,7 @@ def make_isos(vol, spacing, level_low=None, level_hi=None):
     level_hi = float(np.percentile(pos, 95))     # 95% タイル（“鉛候補”）
   
   if level_hi < level_low:
-    level_hi = level_low * 1.05  # hi を low より少し上にする
+    level_hi = level_low * 1.05
 
   # skimage は (z,y,x) 順・spacing=(dz,dy,dx)
   try:
@@ -59,7 +58,7 @@ def make_isos(vol, spacing, level_low=None, level_hi=None):
 def add_mesh(ax, verts, faces, color, alpha, origin):
   if verts.size == 0: return
   # verts は (z,y,x)。ROI原点 (zmin, ymin, xmin) を加えてから (x,y,z) へ
-  oz, oy, ox = origin  # 注意: originは (zmin, ymin, xmin) の順で受け取る
+  oz, oy, ox = origin
   V = np.empty_like(verts)
   V[:, 0] = verts[:, 2] + ox  # x = x + xmin
   V[:, 1] = verts[:, 1] + oy  # y = y + ymin
@@ -87,12 +86,17 @@ def main():
   ap.add_argument("--vol", default="build/outputs/recon3d_vol.npy")
   ap.add_argument("--grid3d", default="configs/grid3d.yml")
   ap.add_argument("--pairs", default="build/outputs/pairs.csv")
-  ap.add_argument("--low", type=float, default=None, help="青の等値面レベル（指定なければ自動）")
-  ap.add_argument("--hi",  type=float, default=None, help="赤の等値面レベル（指定なければ自動）")
-  ap.add_argument("--dpi", type=int, default=220)
-  ap.add_argument("--out", default="recon3d_view.png") # 出力ファイル名を view.png に変更
+  ap.add_argument("--low", type=float, default=None, help="青の等値面レベル（絶対値。指定なければ自動）")
+  ap.add_argument("--hi",  type=float, default=None, help="赤の等値面レベル（絶対値。指定なければ自動）")
   
-  # --- _view の機能を追加 ---
+  # ★ 修正点1: パーセンタイルオプションの追加
+  ap.add_argument("--plow", type=float, default=None, help="青の等値面レベル（パーセンタイル、例: 70）")
+  ap.add_argument("--phi",  type=float, default=None, help="赤の等値面レベル（パーセンタイル、例: 95）")
+  
+  ap.add_argument("--dpi", type=int, default=220)
+  ap.add_argument("--out", default="recon3d_view.png")
+  
+  # --- その他の引数はそのまま ---
   ap.add_argument("--mask-z-mm", type=float, default=0.0, help="z境界からこの[mm]内のボクセルをゼロにする（アーチファクト抑制）")
   ap.add_argument("--view", choices=["iso","side","front","top"], default="iso", help="視点プリセット (iso:斜め, side:側面, front:正面, top:上部)")
   ap.add_argument("--elev", type=float, default=None, help="カメラ仰角 (Elevation)")
@@ -109,18 +113,22 @@ def main():
   zmin,zmax = float(g["z_min"]), float(g["z_max"])
   sx = (xmax-xmin)/nx; sy=(ymax-ymin)/ny; sz=(zmax-zmin)/nz
 
-  # --- Z端の簡易マスク（板近傍アーチファクト抑制）の適用 ---
+  # Z端の簡易マスク（板近傍アーチファクト抑制）の適用
   mmm = args.mask_z_mm
   if mmm and mmm > 0.0:
-    # zmin から zmax の間に nz 個のボクセル中心座標を生成
     zc = np.linspace(zmin, zmax, nz, endpoint=False) + sz * 0.5
-    # マスク条件: z_min + mmm 未満、または z_max - mmm より大きい
     mask = (zc <= zmin + mmm) | (zc >= zmax - mmm)
-    # マスクされたZスライスを全てゼロにする
     vol[mask, :, :] = 0.0
-  # --- ここまで ---
 
-  # 等値面生成
+  # ★ 修正点2: パーセンタイルが指定された場合、args.low/hi を上書きする
+  pos = vol[vol > 0].ravel()
+  if pos.size > 0:
+    if args.plow is not None:
+      args.low = np.percentile(pos, args.plow)
+    if args.phi is not None:
+      args.hi = np.percentile(pos, args.phi)
+
+  # 等値面生成 (args.low/hi には、絶対値または None が入る)
   (vL,fL),(vH,fH),(lvL,lvH) = make_isos(vol, spacing=(sz,sy,sx), level_low=args.low, level_hi=args.hi)
 
   # Top/Bottom の z（中央値）
@@ -130,14 +138,12 @@ def main():
     with open(args.pairs) as f:
       r=csv.DictReader(f)
       for row in r:
-        # csv.DictReaderは文字列を返すのでfloatに変換する
         try:
           tzs.append(float(row["top_z"])); bzs.append(float(row["bot_z"]))
         except ValueError:
-          pass # データ欠損があればスキップ
+          pass
   
-  # z_top/z_bot の計算は、データが空の場合はz_min/z_maxの付近に設定する
-  z_top = float(np.median(tzs)) if tzs else zmax - 30 # Geant4のデフォルト ±3cm=±30mm を想定
+  z_top = float(np.median(tzs)) if tzs else zmax - 30
   z_bot = float(np.median(bzs)) if bzs else zmin + 30
   
   # 図
@@ -157,7 +163,7 @@ def main():
   ax.set_xlabel("X [mm]"); ax.set_ylabel("Y [mm]"); ax.set_zlabel("Z [mm]")
   ax.set_box_aspect((xmax-xmin, ymax-ymin, zmax-zmin))
 
-  # --- 角度（View Init）の設定 ---
+  # 角度（View Init）の設定
   elev = args.elev
   azim = args.azim
   
@@ -175,7 +181,6 @@ def main():
     azim = -60 if azim is None else azim
 
   ax.view_init(elev=elev, azim=azim)
-  # --- ここまで ---
   
   # タイトル
   title = f"3D Reconstruction  (low≈{lvL:.3g}, high≈{lvH:.3g})"

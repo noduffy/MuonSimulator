@@ -1,0 +1,4 @@
+/Users/noduffy_pc/ITF/卒業研究/code/mygeom/build/CMakeFiles/mygeom.dir
+/Users/noduffy_pc/ITF/卒業研究/code/mygeom/build/CMakeFiles/copy_macros.dir
+/Users/noduffy_pc/ITF/卒業研究/code/mygeom/build/CMakeFiles/edit_cache.dir
+/Users/noduffy_pc/ITF/卒業研究/code/mygeom/build/CMakeFiles/rebuild_cache.dir

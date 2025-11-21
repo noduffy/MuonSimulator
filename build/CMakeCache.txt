@@ -121,6 +121,9 @@ CMAKE_OSX_DEPLOYMENT_TARGET:STRING=
 // inside the indicated SDK.
 CMAKE_OSX_SYSROOT:STRING=
 
+//No help, variable specified on the command line.
+CMAKE_PREFIX_PATH:UNINITIALIZED=/Users/noduffy_pc/opt/geant4-11.3.2-min
+
 //Value Computed by CMake
 CMAKE_PROJECT_COMPAT_VERSION:STATIC=
 
@@ -207,8 +210,8 @@ EXPAT_LIBRARY_DEBUG:FILEPATH=EXPAT_LIBRARY_DEBUG-NOTFOUND
 //Path to a library.
 EXPAT_LIBRARY_RELEASE:FILEPATH=/opt/homebrew/opt/expat/lib/libexpat.dylib
 
-//No help, variable specified on the command line.
-Geant4_DIR:UNINITIALIZED=/Users/noduffy_pc/opt/geant4-11.3.2-min/lib/cmake/Geant4
+//The directory containing a CMake configuration file for Geant4.
+Geant4_DIR:PATH=/Users/noduffy_pc/opt/geant4-11.3.2-min/lib/cmake/Geant4
 
 //Arguments to supply to pkg-config
 PKG_CONFIG_ARGN:STRING=

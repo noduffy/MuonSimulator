@@ -19,7 +19,8 @@ void SteppingAction::UserSteppingAction(const G4Step* step) {
   if (!pv) return;
   auto lv = pv->GetLogicalVolume();
   if (!lv) return;
-  if (lv->GetName() != "PlateLV") return;
+  G4String name = lv->GetName();
+  if (name != "PlateLV" && name != "PbLV") return;
 
   const auto* trk = step->GetTrack();
   auto dir = trk->GetMomentumDirection();

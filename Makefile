@@ -1,19 +1,23 @@
-.PHONY: build clean-outputs run recon3d full3d
+.PHONY: build clean-build setting clean-outputs run recon3d full3d all
 
 # 可変パラメータ（必要に応じて上書き可能）
 PY      ?= python3
 ITERS   ?= 200
 GRID3D  ?= configs/grid3d.yml
 
+clean-build:
+	@rm -rf build
+	@mkdir build
+
 build:
-	@cmake -S . -B build
-	@cmake --build build -j2
+	@cd build && \
+	CMAKE_IGNORE_PATH="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib" \
+	CMAKE_INCLUDE_PATH="/opt/homebrew/opt/expat/include" \
+	CMAKE_LIBRARY_PATH="/opt/homebrew/opt/expat/lib" \
+	cmake .. -DGeant4_DIR="$$(echo $$HOME)/opt/geant4-11.3.2-min/lib/cmake/Geant4" && \
+	$(MAKE) -j2
 
-clean-outputs:
-	@mkdir -p build/outputs
-	@find build/outputs -mindepth 1 -maxdepth 1 -delete
-
-run: build clean-outputs
+run:
 	@cd build && ./mygeom ../macros/run.mac
 
 recon3d:
@@ -25,3 +29,5 @@ recon3d:
 	@$(PY) scripts/render_recon3d_view.py --view side --out build/outputs/recon3d_side.png
 
 full3d: run recon3d
+
+all: clean-build build run recon3d

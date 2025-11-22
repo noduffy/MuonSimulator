@@ -1,4 +1,4 @@
-.PHONY: build clean-build setting clean-outputs run recon3d full3d all
+.PHONY: build clean-build setting clean-outputs run recon3d full3d all all-test
 
 # 可変パラメータ（必要に応じて上書き可能）
 PY      ?= python3
@@ -28,6 +28,16 @@ recon3d:
 	@$(PY) scripts/render_recon3d_png.py
 	@$(PY) scripts/render_recon3d_view.py --view side --out build/outputs/recon3d_side.png
 
+recon3d-test:
+	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv --policy first
+	@$(PY) scripts/rays_from_pairs.py build/outputs/pairs.csv rays.csv
+	@$(PY) scripts/build_W3D_poca.py --pairs build/outputs/pairs.csv --rays build/outputs/rays.csv --grid3d $(GRID3D) --outW W3D_poca.npz --outy y_theta2_3d.npy
+	@$(PY) scripts/recon_mlem3d.py --iters $(ITERS) --W W3D_poca.npz
+	@$(PY) scripts/render_recon3d_view.py --vol build/outputs/recon3d_vol.npy --out recon3d_render_poca.png
+	@$(PY) scripts/render_recon3d_view.py --vol build/outputs/recon3d_vol.npy --view side --out recon3d_side_poca.png
+
 full3d: run recon3d
 
 all: clean-build build run recon3d
+
+all-test: clean-build build run recon3d-test

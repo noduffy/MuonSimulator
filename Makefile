@@ -1,4 +1,4 @@
-.PHONY: build clean-build setting clean-outputs run recon3d full3d all all-test
+.PHONY: build clean-build setting clean-outputs run simple cgls recon3d full3d all all-test
 
 # 可変パラメータ（必要に応じて上書き可能）
 PY      ?= python3
@@ -20,6 +20,20 @@ build:
 run:
 	@cd build && ./mygeom ../macros/run.mac
 
+simple:
+	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv --policy first
+	@$(PY) scripts/separate_muons.py
+	@$(PY) scripts/plot_poca_3d_simple.py
+
+cgls:
+	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv --policy first
+	@$(PY) scripts/separate_muons.py
+	@$(PY) scripts/build_system_matrix.py
+	@$(PY) scripts/recon_cgls_3d.py
+	@$(PY) scripts/recon_cgls_3d_progressive.py
+	
+#	@$(PY) scripts/render_recon_x_3d.py
+
 recon3d:
 	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv --policy first
 	@$(PY) scripts/rays_from_pairs.py build/outputs/pairs.csv rays.csv
@@ -38,6 +52,6 @@ recon3d-test:
 
 full3d: run recon3d
 
-all: clean-build build run recon3d
+all: clean-build build run
 
 all-test: clean-build build run recon3d-test

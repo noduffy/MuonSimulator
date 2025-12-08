@@ -46,10 +46,10 @@ def build_W(pairs_path, rays_path, grid3d_path, outW, outy, batch_size=50000):
         g = yaml.safe_load(f)
     nx, ny, nz = int(g["nx"]), int(g["ny"]), int(g["nz"])
     
-    # ★ 修正箇所: xmin/xmaxだけでなく、ymin/ymax, zmin/zmaxも定義
+    # xmin/xmaxだけでなく、ymin/ymax, zmin/zmaxも定義
     xmin, xmax = float(g["x_min"]), float(g["x_max"])
-    ymin, ymax = float(g["y_min"]), float(g["y_max"]) # ← 定義を追加
-    zmin, zmax = float(g["z_min"]), float(g["z_max"]) # ← 定義を修正
+    ymin, ymax = float(g["y_min"]), float(g["y_max"])
+    zmin, zmax = float(g["z_min"]), float(g["z_max"])
 
     n_rays = len(pairs_df)
     n_voxels = nx * ny * nz
@@ -64,7 +64,7 @@ def build_W(pairs_path, rays_path, grid3d_path, outW, outy, batch_size=50000):
     voxel_centers = np.column_stack((XC.ravel(), YC.ravel(), ZC.ravel()))
     all_cols = np.arange(n_voxels) # ボクセル列インデックス
 
-    # ★ 修正箇所: W行列のチャンクを格納するリスト
+    # W行列のチャンクを格納するリスト
     W_chunks = [] 
     
     y = rays_df["theta2"].values
@@ -76,6 +76,10 @@ def build_W(pairs_path, rays_path, grid3d_path, outW, outy, batch_size=50000):
 
     # 全てのレイをベクトル化された処理で反復
     num_batches = (n_rays + batch_size - 1) // batch_size
+    
+    # グリッドのボクセルサイズ（対角線の長さの半分）を定義
+    # これはPOCAがボクセル内部にあるかどうかを緩やかに判断するのに役立つ
+    voxel_radius_sq = (dx**2 + dy**2 + dz**2) / 4.0
     
     for batch_idx in tqdm(range(num_batches), desc="Processing Batches"):
         start_ray = batch_idx * batch_size
@@ -94,19 +98,43 @@ def build_W(pairs_path, rays_path, grid3d_path, outW, outy, batch_size=50000):
             A = np.array([ray["top_x"], ray["top_y"], ray["top_z"]])
             B = np.array([ray["bot_x"], ray["bot_y"], ray["bot_z"]])
             
-            # --- ベクトル化された POCA 重み計算 ---
+            # --- POCA 重み計算 ---
             V = B - A
             V_sq_norm = np.sum(V**2)
-            W_vec = voxel_centers - A
-            
-            t_POCA = np.clip(np.dot(W_vec, V) / V_sq_norm, 0.0, 1.0)
-            P = A + t_POCA[:, None] * V
-            poca_distance_sq = np.sum((voxel_centers - P)**2, axis=1)
-            poca_weights = np.exp(-poca_distance_sq / (2 * POCA_SIGMA_SQ))
+            ray_length = np.sqrt(V_sq_norm) # レイの長さ
+
+            # Vの長さ（ノルム）がゼロでなければ、単位ベクトル U を計算
+            if V_sq_norm > 1e-12:
+                U = V / ray_length # 単位ベクトル U を計算
+                W_vec = voxel_centers - A # ボクセル中心からAへのベクトル
+                
+                # POCA上のパラメータ t を計算 (Aからの距離)
+                t_POCA = np.dot(W_vec, U)
+                
+                # t_POCAをA-Bセグメント内にクリップ
+                t_POCA_clip = np.clip(t_POCA, 0.0, ray_length)
+                
+                # POCAの座標をt_POCA_clipで再計算
+                P_clip = A + t_POCA_clip[:, None] * U
+                poca_distance_sq = np.sum((voxel_centers - P_clip)**2, axis=1)
+                
+                # ★ 修正箇所 1: ガウス重みを計算
+                poca_weights = np.exp(-poca_distance_sq / (2 * POCA_SIGMA_SQ))
+                
+                # ★ 修正箇所 2: エッジ効果対策として、POCA重みにレイの長さを乗じる (AoI的な補正)
+                # このスケーリングにより、ボクセルを長く通過したレイの重みが増し、エッジの偽像を抑制する
+                # シンプルなPOCA重み付けでは、この乗算がエッジ効果を軽減する標準的な手法
+                scaled_weights = poca_weights * ray_length
+                
+            else:
+                # Vの長さがほぼゼロの場合
+                poca_distance_sq = np.sum((voxel_centers - A)**2, axis=1)
+                poca_weights = np.exp(-poca_distance_sq / (2 * POCA_SIGMA_SQ))
+                scaled_weights = poca_weights * ray_length
 
             # フィルタリング（メモリ最適化）
-            mask = poca_weights > WEIGHT_THRESHOLD
-            filtered_weights = poca_weights[mask]
+            mask = scaled_weights > WEIGHT_THRESHOLD # スケール後の重みでフィルタリング
+            filtered_weights = scaled_weights[mask]
             filtered_cols = all_cols[mask] 
 
             # W行列に追加 (グローバルな行インデックスを使用)

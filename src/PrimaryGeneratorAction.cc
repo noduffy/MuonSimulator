@@ -3,15 +3,15 @@
 #include "G4ParticleTable.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4Event.hh"
-#include "Randomize.hh" // G4UniformRand() のために必要
+#include "Randomize.hh"
+#include "G4ThreeVector.hh"
+#include <cmath>
 
 PrimaryGeneratorAction::PrimaryGeneratorAction() {
-  // G4ParticleGun の初期化はコンストラクタで行う
   fGun = new G4ParticleGun(1);
   auto muMinus = G4ParticleTable::GetParticleTable()->FindParticle("mu-");
   fGun->SetParticleDefinition(muMinus);
-  fGun->SetParticleEnergy(3*GeV);
-  // 位置と方向は GeneratePrimaries で設定するため、ここでは設定しない
+  fGun->SetParticleEnergy(3*GeV); // エネルギーは一旦固定でOK
 }
 
 PrimaryGeneratorAction::~PrimaryGeneratorAction() {
@@ -19,17 +19,30 @@ PrimaryGeneratorAction::~PrimaryGeneratorAction() {
 }
 
 void PrimaryGeneratorAction::GeneratePrimaries(G4Event* event) {
-  // DetectorConstruction.cc より、検出板の半幅は 10*cm
-  G4double half_size = 10.0*cm; 
-  G4double z_start = 5.0*cm; // 上部検出板 (3cm) の上から開始
+  // 検出器より少し広い範囲から降らせるのが一般的
+  G4double half_size = 15.0*cm; 
+  G4double z_start = 5.0*cm; 
 
-  // X と Y の位置を [-10cm, 10cm] の間でランダムに生成
+  // 位置のランダム化
   G4double rand_x = 2.0 * half_size * G4UniformRand() - half_size;
   G4double rand_y = 2.0 * half_size * G4UniformRand() - half_size;
+  fGun->SetParticlePosition(G4ThreeVector(rand_x, rand_y, z_start));
 
-  // 設定をイベントごとに適用
-  fGun->SetParticlePosition({rand_x, rand_y, z_start});
-  fGun->SetParticleMomentumDirection({0,0,-1}); // 真っ直ぐ下向きを維持
+  // --- 角度の決定 (Cos^2分布) ---
+  // 天頂角 theta: 水平面への入射頻度 ~ cos^2(theta) * cos(theta) = cos^3
+  // 逆関数法: u = rand, cos(theta) = u^(1/4)
+  G4double u = G4UniformRand();
+  G4double cosTheta = std::pow(u, 0.25); 
+  G4double sinTheta = std::sqrt(1.0 - cosTheta * cosTheta);
+  
+  // 方位角 phi: 0 ~ 360度
+  G4double phi = 360.0 * deg * G4UniformRand();
 
+  // 下向きなので z成分はマイナス
+  G4double px = sinTheta * std::cos(phi);
+  G4double py = sinTheta * std::sin(phi);
+  G4double pz = -cosTheta;
+
+  fGun->SetParticleMomentumDirection(G4ThreeVector(px, py, pz));
   fGun->GeneratePrimaryVertex(event);
 }

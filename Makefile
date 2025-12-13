@@ -1,4 +1,4 @@
-.PHONY: build clean-build setting clean-outputs run simple cgls recon3d full3d all all-test check
+.PHONY: build clean-build setting clean-outputs run simple cgls make-csv mix recon3d full3d all all-test check
 
 # 可変パラメータ（必要に応じて上書き可能）
 PY      ?= python3
@@ -28,11 +28,18 @@ simple:
 cgls:
 	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
 	@$(PY) scripts/separate_muons.py
-	@$(PY) scripts/build_system_matrix.py
+	@$(PY) scripts/build_system_matrix.py --input scattered_muons.csv --mode poca_traj
 	@$(PY) scripts/recon_cgls_3d.py
 	@$(PY) scripts/recon_cgls_3d_progressive.py
-	
-#	@$(PY) scripts/render_recon_x_3d.py
+
+make-csv:
+	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
+	@$(PY) scripts/separate_muons.py
+
+mix:
+	@$(PY) scripts/mix_muon_data.py --ratio 3.0
+	@$(PY) scripts/build_system_matrix.py --input mixed_muons.csv --mode poca_traj
+	@$(PY) scripts/recon_cgls_3d_progressive.py
 
 recon3d:
 	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv

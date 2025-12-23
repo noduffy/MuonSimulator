@@ -167,30 +167,42 @@ def _calculate_matrix_path(df_in, nx, ny, nz, ranges, mode='slp'):
   return np.array(rows), np.array(cols), np.array(data), np.array(y_out)
 
 def main():
-  parser = argparse.ArgumentParser()
+  parser = argparse.ArgumentParser(description="システム行列Wの構築")
   parser.add_argument("--mode", choices=['slp', 'poca', 'poca_traj'], default='poca_traj', 
                       help="W生成: 'poca'(ガウス), 'slp'(直線), 'poca_traj'(折れ線)")
+  # ★★★ 追加: 入力ファイルを指定可能にする ★★★
+  parser.add_argument("--input", default="scattered_muons.csv", 
+                      help="入力CSVファイル名 (build/outputs/以下)。例: mixed_muons.csv")
   args = parser.parse_args()
 
   OUTPUT_DIR = Path("build/outputs")
-  INPUT_CSV = OUTPUT_DIR / 'scattered_muons.csv'
+  # 指定された入力ファイルを読み込む
+  INPUT_CSV = OUTPUT_DIR / args.input
   
+  if not INPUT_CSV.exists():
+    print(f"[Error] 入力ファイルが見つかりません: {INPUT_CSV}")
+    print("  -> mix_muon_data.py を実行して mixed_muons.csv を作成したか確認してください。")
+    sys.exit(1)
+
   try:
+    print(f"データを読み込んでいます: {INPUT_CSV}")
     df = pd.read_csv(INPUT_CSV)
-    with open('configs/grid3d.yml') as f: g = yaml.safe_load(f)
+    with open('configs/grid3d.yml', 'r') as f: g = yaml.safe_load(f)
   except Exception as e: print(f"Error: {e}"); sys.exit(1)
 
   nx, ny, nz = int(g["nx"]), int(g["ny"]), int(g["nz"])
   ranges = (float(g["x_min"]), float(g["x_max"]), float(g["y_min"]), float(g["y_max"]), float(g["z_min"]), float(g["z_max"]))
   N_VOXELS = nx * ny * nz
   
-  print(f"--- W構築 (Mode: {args.mode}, Angle^2: YES) ---")
+  print(f"--- W構築 (Mode: {args.mode}, Input: {args.input}, Angle^2: YES) ---")
   
+  # ここで各計算関数を呼び出す (関数定義は既存のものを使用)
   if args.mode == 'poca':
     rows, cols, data, y = calculate_matrix_poca(df, nx, ny, nz, ranges)
   elif args.mode == 'slp':
     rows, cols, data, y = calculate_matrix_slp(df, nx, ny, nz, ranges)
   elif args.mode == 'poca_traj':
+    # 未定義エラーを防ぐため、前回の calculate_matrix_poca_traj 関数が必要です
     rows, cols, data, y = calculate_matrix_poca_traj(df, nx, ny, nz, ranges)
     
   if rows is None: print("有効データなし"); sys.exit(1)
@@ -200,7 +212,6 @@ def main():
   
   OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
   
-  # 保存
   save_npz(OUTPUT_DIR / 'W_mlem_sparse.npz', W)
   np.save(OUTPUT_DIR / 'y_mlem_vector.npy', y)
   

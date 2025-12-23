@@ -158,10 +158,15 @@ def run_cgls_progressive(A, b, nx, ny, nz, ranges, max_iter, interval, low_thres
       # 非負制約 (物理的に負の密度はありえないためクリップ)
       x_save = np.clip(x, 0, None)
       
+      # ★★★ 追加: 数値データ(.npy)を保存 ★★★
+      # これがないと fusion (手法C) で読み込めません
+      npy_path = output_dir / f"x_iter_{i:04d}.npy"
+      np.save(npy_path, x_save)
+      
       # 画像を保存
       img_path = output_dir / f"render_iter_{i:04d}.png"
       save_snapshot(x_save, nx, ny, nz, ranges, i, img_path, z_detectors, low_thresh)
-      print(f"Iteration {i:04d}: 画像を保存しました -> {img_path.name}")
+      print(f"Iteration {i:04d}: 保存しました -> {img_path.name}, {npy_path.name}")
 
   return x
 

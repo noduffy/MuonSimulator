@@ -1,4 +1,4 @@
-.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps all check
+.PHONY: build clean-build setting clean-outputs run make-csv cgls cgls-norm mix make-maps all check
 
 # --- 設定変数 ---
 PY      ?= python3
@@ -48,6 +48,15 @@ cgls:
 	@$(PY) $(SRC_REC)/build_system_matrix.py --input scattered_muons.csv --mode poca_traj
 	@echo "--- Running Reconstruction ---"
 	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls
+
+cgls-norm:
+	@echo "--- Building System Matrix with Flux Normalization ---"
+	@$(PY) $(SRC_REC)/build_system_matrix.py \
+		--input scattered_muons.csv \
+		--mode poca_traj \
+		--flux flux_all.npy
+	@echo "--- Running Reconstruction (Normalized) ---"
+	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_norm
 
 # ==============================================================================
 # 4. 手法C (Fusion / Probability Map)

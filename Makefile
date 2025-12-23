@@ -1,10 +1,19 @@
-.PHONY: build clean-build setting clean-outputs run simple cgls make-csv mix recon3d full3d all all-test check
+.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps all check
 
-# 可変パラメータ（必要に応じて上書き可能）
+# --- 設定変数 ---
 PY      ?= python3
 ITERS   ?= 200
 GRID3D  ?= configs/grid3d.yml
 
+# --- ディレクトリ定義 ---
+SRC_PRE   = scripts/preprocessing
+SRC_REC   = scripts/reconstruction
+SRC_VIS   = scripts/visualization
+SRC_FUS   = scripts/fusion
+
+# ==============================================================================
+# 1. ビルド & 実行
+# ==============================================================================
 clean-build:
 	@rm -rf build
 	@mkdir build
@@ -20,48 +29,53 @@ build:
 run:
 	@cd build && ./mygeom ../macros/run.mac
 
-simple:
-	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
-	@$(PY) scripts/separate_muons.py
-	@$(PY) scripts/plot_poca_3d_simple.py
-
-cgls:
-	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
-	@$(PY) scripts/separate_muons.py
-	@$(PY) scripts/build_system_matrix.py --input scattered_muons.csv --mode poca_traj
-	@$(PY) scripts/recon_cgls_3d.py
-	@$(PY) scripts/recon_cgls_3d_progressive.py
-
-make-csv:
-	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
-	@$(PY) scripts/separate_muons.py
-
-mix:
-	@$(PY) scripts/mix_muon_data.py --ratio 3.0
-	@$(PY) scripts/build_system_matrix.py --input mixed_muons.csv --mode poca_traj
-	@$(PY) scripts/recon_cgls_3d_progressive.py
-
-recon3d:
-	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
-	@$(PY) scripts/rays_from_pairs.py build/outputs/pairs.csv rays.csv
-	@$(PY) scripts/build_W3D.py --pairs build/outputs/pairs.csv --rays build/outputs/rays.csv --grid3d $(GRID3D) --outW W3D_coo.npz --outy y_theta2_3d.npy
-	@$(PY) scripts/recon_mlem3d.py --iters $(ITERS)
-	@$(PY) scripts/render_recon3d_png.py
-	@$(PY) scripts/render_recon3d_view.py --view side --out build/outputs/recon3d_side.png
-
-recon3d-test:
-	@$(PY) scripts/generate_pairs.py --hit build/hits.csv --out pairs.csv
-	@$(PY) scripts/rays_from_pairs.py build/outputs/pairs.csv rays.csv
-	@$(PY) scripts/build_W3D_poca.py --pairs build/outputs/pairs.csv --rays build/outputs/rays.csv --grid3d $(GRID3D) --outW W3D_poca.npz --outy y_theta2_3d.npy
-	@$(PY) scripts/recon_mlem3d.py --iters $(ITERS) --W W3D_poca.npz
-	@$(PY) scripts/render_recon3d_view.py --vol build/outputs/recon3d_vol.npy --out recon3d_render_poca.png
-	@$(PY) scripts/render_recon3d_view.py --vol build/outputs/recon3d_vol.npy --view side --out recon3d_side_poca.png
-
-full3d: run recon3d
-
 all: clean-build build run
 
-all-test: clean-build build run recon3d-test
+# ==============================================================================
+# 2. データ生成
+# ==============================================================================
+make-csv:
+	@echo "--- Generating Pairs ---"
+	@$(PY) $(SRC_PRE)/generate_pairs.py --hit build/hits.csv --out pairs.csv
+	@echo "--- Separating Muons ---"
+	@$(PY) $(SRC_PRE)/separate_muons.py
+
+# ==============================================================================
+# 3. 再構成 (通常手法)
+# ==============================================================================
+cgls:
+	@echo "--- Building System Matrix ---"
+	@$(PY) $(SRC_REC)/build_system_matrix.py --input scattered_muons.csv --mode poca_traj
+	@echo "--- Running Reconstruction ---"
+	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls
+
+# ==============================================================================
+# 4. 手法C (Fusion / Probability Map)
+# ==============================================================================
+
+# make-maps: 分子(flux_straight.npy) と 分母(flux_all.npy) を作成する
+# ※ ratio=1.0 (全データ使用) にしないと確率が狂うので注意
+# Step 1: Flux Mapの作成
+make-maps:
+	@echo "--- Creating Flux Map (All) ---"
+	@$(PY) $(SRC_FUS)/build_flux_map.py --scat scattered_muons.csv --straight straight_muons.csv --ratio 1.0 --out flux_all.npy
+	@echo "--- Creating Flux Map (Straight Only) ---"
+	@$(PY) $(SRC_FUS)/build_flux_map.py --straight straight_muons.csv --ratio 1.0 --out flux_straight.npy
+
+# Step 2: 確率マップ(図2)の作成
+prob-map:
+	@echo "--- Calculating Probability Map (Method B) ---"
+	@$(PY) $(SRC_FUS)/calc_prob_map.py \
+		--all flux_all.npy \
+		--straight flux_straight.npy \
+		--out_npy prob_map.npy \
+		--out_png prob_map_render.png
+
+# ==============================================================================
+# ユーティリティ
+# ==============================================================================
+clean-outputs:
+	@rm -rf build/outputs/*
 
 check:
 	@$(PY) scripts/inspect_x_values.py

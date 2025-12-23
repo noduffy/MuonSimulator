@@ -100,7 +100,7 @@ def calculate_matrix_slp_binary(df_in, nx, ny, nz, ranges):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--input", default="straight_muons.csv", help="入力CSVファイル名 (build/outputs内)")
-  parser.add_argument("--ratio", type=float, default=0.1, help="使用するデータの割合 (0.1なら10%)")
+  parser.add_argument("--ratio", type=float, default=0.1, help="使用するデータの割合 (0.1なら10%%)")
   args = parser.parse_args()
 
   # 入力パス

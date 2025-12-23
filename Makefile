@@ -1,4 +1,4 @@
-.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps all check
+.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps prob-map fusion all check
 
 # --- 設定変数 ---
 PY      ?= python3
@@ -70,6 +70,17 @@ prob-map:
 		--straight flux_straight.npy \
 		--out_npy prob_map.npy \
 		--out_png prob_map_render.png
+
+# Step 3: 画像融合(図3) - Method C
+# 依存関係: cgls(Method A) と prob-map(Method B) が完了していること
+fusion:
+	@echo "--- Fusing Images (Method C) ---"
+	@$(PY) $(SRC_FUS)/fuse_images.py \
+		--scat progressive_cgls/x_iter_0200.npy \
+		--prob prob_map.npy \
+		--out_npy fused_result.npy \
+		--out_png fused_render.png
+	@echo "[Done] Method C completed."
 
 # ==============================================================================
 # ユーティリティ

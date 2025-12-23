@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # --- 設定値 ---
-SCATTERING_ANGLE_THRESHOLD_RAD = 0.01
+SCATTERING_ANGLE_THRESHOLD_RAD = 0.01 #現状0.043radが一番綺麗に出力される
 # ----------------
 
 def calculate_scattering_angle(df):

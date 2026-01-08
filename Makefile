@@ -45,7 +45,7 @@ make-csv:
 # ==============================================================================
 cgls:
 	@echo "--- Building System Matrix ---"
-	@$(PY) $(SRC_REC)/build_system_matrix.py --input scattered_muons.csv --mode poca_traj
+	@$(PY) $(SRC_REC)/build_system_matrix.py --input scattered_muons.csv --mode poca
 	@echo "--- Running Reconstruction ---"
 	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls
 
@@ -76,7 +76,7 @@ prob-map:
 fusion:
 	@echo "--- Fusing Images (Method C) ---"
 	@$(PY) $(SRC_FUS)/fuse_images.py \
-		--scat progressive_cgls/x_iter_0200.npy \
+		--scat progressive_cgls/x_iter_0020.npy \
 		--prob prob_map.npy \
 		--out_npy fused_result.npy \
 		--out_png fused_render.png
@@ -87,6 +87,10 @@ fusion:
 # ==============================================================================
 clean-outputs:
 	@rm -rf build/outputs/*
+
+vis-setup:
+	@echo "--- Visualizing Simulation Setup ---"
+	@$(PY) scripts/visualization/visualize_setup_3d.py --out setup_render.png
 
 check:
 	@$(PY) scripts/inspect_x_values.py

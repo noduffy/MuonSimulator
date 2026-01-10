@@ -21,7 +21,7 @@ PrimaryGeneratorAction::~PrimaryGeneratorAction() {
 void PrimaryGeneratorAction::GeneratePrimaries(G4Event* event) {
   // 検出器より少し広い範囲から降らせるのが一般的
   G4double half_size = 15.0*cm; 
-  G4double z_start = 5.0*cm; 
+  G4double z_start = 12.0*cm; 
 
   // 位置のランダム化
   G4double rand_x = 2.0 * half_size * G4UniformRand() - half_size;

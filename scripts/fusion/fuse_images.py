@@ -69,7 +69,8 @@ def draw_plate(ax, xmin,xmax,ymin,ymax,z, color, alpha=0.25, thick=2.0):
   poly = Poly3DCollection([P[f] for f in F], facecolors=color, edgecolors="k", linewidths=0.3, alpha=alpha)
   ax.add_collection3d(poly)
 
-def save_snapshot_unified(vol, ranges, out_file, z_detectors, title="Fused Result"):
+# ★修正: elev, azim を引数に追加★
+def save_snapshot_unified(vol, ranges, out_file, z_detectors, elev=22, azim=-60, title="Fused Result"):
   xmin, xmax, ymin, ymax, zmin, zmax = ranges
   nz, ny, nx = vol.shape
   dx = (xmax - xmin) / nx
@@ -91,9 +92,11 @@ def save_snapshot_unified(vol, ranges, out_file, z_detectors, title="Fused Resul
   ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax); ax.set_zlim(zmin, zmax)
   ax.set_xlabel("X [mm]"); ax.set_ylabel("Y [mm]"); ax.set_zlabel("Z [mm]")
   ax.set_box_aspect((xmax-xmin, ymax-ymin, zmax-zmin))
-  ax.view_init(elev=22, azim=-60)
   
-  ax.set_title(f"{title}\n(Iso-levels: {lvL:.2g}, {lvH:.2g})")
+  # ★修正: 指定されたアングルをセット★
+  ax.view_init(elev=elev, azim=azim)
+  
+  ax.set_title(f"{title}\n(Iso-levels: {lvL:.2g}, {lvH:.2g}) View: el={elev}, az={azim}")
   
   plt.tight_layout()
   plt.savefig(out_file, bbox_inches="tight")
@@ -106,7 +109,7 @@ def main():
   parser.add_argument("--scat", required=True, help="手法Aのnpy (例: progressive_cgls/x_iter_0200.npy)")
   parser.add_argument("--prob", required=True, help="手法Bのnpy (例: prob_map.npy)")
   parser.add_argument("--out_npy", default="fused_result.npy", help="出力: 融合データ")
-  parser.add_argument("--out_png", default="fused_render.png", help="出力: 融合画像")
+  parser.add_argument("--out_png", default="fused_render.png", help="出力: 融合画像(ベース名)")
   args = parser.parse_args()
 
   path_scat = resolve_out(args.scat)
@@ -120,34 +123,28 @@ def main():
   vol_scat = np.load(path_scat)
   vol_prob = np.load(path_prob)
 
-  # ★★★ 修正: 形状合わせ (1D -> 3D) ★★★
-  # vol_scat が1次元配列の場合、vol_prob の形状に合わせて変形する
+  # 形状合わせ (1D -> 3D)
   if vol_scat.ndim == 1 and vol_prob.ndim == 3:
     if vol_scat.size == vol_prob.size:
       print(f"  -> Reshaping Scat {vol_scat.shape} to {vol_prob.shape}")
       vol_scat = vol_scat.reshape(vol_prob.shape)
     else:
       print(f"[Error] Size mismatch: Scat {vol_scat.size} != Prob {vol_prob.size}")
-      print("  -> 解像度(grid3d.yml)の設定が計算時と異なっている可能性があります。")
       sys.exit(1)
   
-  # 念のため、どちらも3Dか確認
   if vol_scat.shape != vol_prob.shape:
     print(f"[Error] Shape mismatch: Scat{vol_scat.shape} != Prob{vol_prob.shape}")
     sys.exit(1)
 
   # --- 融合処理 (Masking) ---
   print("Fusing images (Method A * Method B)...")
-  
-  # Method A (散乱) × Method B (物体確率)
   vol_fused = vol_scat * vol_prob
   
-  # 保存
   out_npy = resolve_out(args.out_npy)
   np.save(out_npy, vol_fused)
   print(f"[OK] Fused data saved: {out_npy}")
 
-  # レンダリング
+  # --- レンダリング (複数アングル) ---
   try:
     with open(config_path("grid3d.yml")) as f:
       g = yaml.safe_load(f)
@@ -167,9 +164,28 @@ def main():
         except Exception: pass
     z_top_pos = float(np.median(z_top_list)) if z_top_list else z_center + 50
     z_bot_pos = float(np.median(z_bot_list)) if z_bot_list else z_center - 50
+    z_detectors = (z_top_pos, z_bot_pos)
 
-    out_png = resolve_out(args.out_png)
-    save_snapshot_unified(vol_fused, ranges, out_png, (z_top_pos, z_bot_pos), title="Method C: Fused Result")
+    base_png = resolve_out(args.out_png)
+    
+    # ★追加: 出力したいアングルのリスト★
+    views = [
+        {"suffix": "",        "elev": 22, "azim": -60}, # デフォルト(斜め)
+        {"suffix": "_top",    "elev": 90, "azim": 0},   # 真上から
+        {"suffix": "_side_x", "elev": 0,  "azim": -90}, # X方向から(真横)
+        {"suffix": "_side_y", "elev": 0,  "azim": 0},   # Y方向から(正面)
+    ]
+    
+    print("Rendering multiple views...")
+    for view in views:
+      # ファイル名を決定 (例: fused_render_top.png)
+      out_png_path = base_png.with_name(f"{base_png.stem}{view['suffix']}{base_png.suffix}")
+      
+      save_snapshot_unified(
+          vol_fused, ranges, out_png_path, z_detectors, 
+          elev=view["elev"], azim=view["azim"], # アングルを指定
+          title="Method C: Fused Result"
+      )
 
   except Exception as e:
     print(f"[Warn] Rendering failed: {e}")

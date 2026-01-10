@@ -82,6 +82,15 @@ fusion:
 		--out_png fused_render.png
 	@echo "[Done] Method C completed."
 
+# 手法D: 確率マップを事前情報として用いたCGLS
+method-d:
+	@echo "--- Running Method D (Constrained Reconstruction) ---"
+	@$(PY) scripts/reconstruction/recon_method_d.py \
+		--prob_map prob_map.npy \
+		--out_dir method_d_result \
+		--max_iter 100 \
+		--interval 10
+
 # ==============================================================================
 # ユーティリティ
 # ==============================================================================

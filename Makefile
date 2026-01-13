@@ -49,6 +49,8 @@ cgls:
 	@echo "--- Running Reconstruction ---"
 	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls
 
+method-a: all make-csv cgls
+
 # ==============================================================================
 # 4. 手法C (Fusion / Probability Map)
 # ==============================================================================
@@ -83,12 +85,12 @@ fusion:
 	@echo "[Done] Method C completed."
 
 # 手法D: 確率マップを事前情報として用いたCGLS
-method-d:
+method-d: make-maps prob-map
 	@echo "--- Running Method D (Constrained Reconstruction) ---"
 	@$(PY) scripts/reconstruction/recon_method_d.py \
 		--prob_map prob_map.npy \
 		--out_dir method_d_result \
-		--max_iter 100 \
+		--max_iter 150 \
 		--interval 10
 
 # ==============================================================================

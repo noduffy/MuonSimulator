@@ -43,11 +43,11 @@ G4VPhysicalVolume* DetectorConstruction::Construct() {
     auto pbLV  = new G4LogicalVolume(pbBox, pb, "PbLV");
     
     // 中央に1つ配置
-    new G4PVPlacement(nullptr, G4ThreeVector(0*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 0);
+    // new G4PVPlacement(nullptr, G4ThreeVector(0*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 0);
 
     // 左右に配置 (-40mm, +40mm)
-    // new G4PVPlacement(nullptr, G4ThreeVector(-40*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 0);
-    // new G4PVPlacement(nullptr, G4ThreeVector(+40*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 1);
+    new G4PVPlacement(nullptr, G4ThreeVector(-40*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 0);
+    new G4PVPlacement(nullptr, G4ThreeVector(+40*mm,0,0), pbLV, "PbBlockPV", worldLV, false, 1);
 
     auto visPb = new G4VisAttributes(G4Colour(0.2,0.2,0.2,0.8));
     visPb->SetForceSolid(true);

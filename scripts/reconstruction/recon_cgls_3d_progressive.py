@@ -172,8 +172,8 @@ def run_cgls_progressive(A, b, nx, ny, nz, ranges, max_iter, interval, low_thres
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument("--max_iter", type=int, default=300, help="最大反復回数")
-  parser.add_argument("--interval", type=int, default=20, help="画像を保存する間隔")
+  parser.add_argument("--max_iter", type=int, default=150, help="最大反復回数")
+  parser.add_argument("--interval", type=int, default=10, help="画像を保存する間隔")
   parser.add_argument("--low", type=float, default=None, help="表示の閾値 (指定なしなら自動)")
   parser.add_argument("--out_dir", type=str, default="progressive_frames", help="outputs下の保存先ディレクトリ名")
   args = parser.parse_args()

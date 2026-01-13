@@ -1,3 +1,4 @@
+# configs/grid3d.yml
 nx: 40
 ny: 40
 nz: 30

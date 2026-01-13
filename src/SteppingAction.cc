@@ -12,24 +12,33 @@
 
 void SteppingAction::UserSteppingAction(const G4Step* step) {
   auto post = step->GetPostStepPoint();
+  // ジオメトリ境界（物質に入った瞬間）のみを記録
   if (!post || post->GetStepStatus() != fGeomBoundary) return;
-  if (!post) return;
 
   auto pv = post->GetPhysicalVolume();
   if (!pv) return;
   auto lv = pv->GetLogicalVolume();
   if (!lv) return;
+  
   G4String name = lv->GetName();
-  if (name != "PlateLV" && name != "PbLV") return;
+
+  // ★修正: "PbLV" (鉛ブロック) は記録しない！
+  // 検出器 "PlateLV" へのヒットのみを通す
+  if (name != "PlateLV") return;
 
   const auto* trk = step->GetTrack();
+  // 荷電粒子（ミューオン）以外は無視（今回はミューオン単射なら気にしなくてOK）
+  if (trk->GetDefinition()->GetPDGCharge() == 0) return;
+
   auto dir = trk->GetMomentumDirection();
-  auto pos = post->GetPosition(); // 境界位置（入射点）
+  auto pos = post->GetPosition();
 
   auto& out = RunAction::Out();
   if (out.good()) {
     const auto* evt = G4EventManager::GetEventManager()->GetConstCurrentEvent();
     int evid = evt ? evt->GetEventID() : -1;
+    
+    // CSVフォーマット: eventID, trackID, volName, physName, x, y, z, dx, dy, dz
     out << evid << ','
         << trk->GetTrackID() << ','
         << lv->GetName() << ','

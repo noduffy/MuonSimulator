@@ -4,9 +4,10 @@ from pathlib import Path
 import sys
 
 def get_project_root():
-    # このスクリプトは scripts/paper_figures/ にあると仮定
-    # .../scripts/paper_figures/synthesis_pngs.py
-    # -> root is ../../
+    # このスクリプトの場所: .../mygeom/scripts/paper_figures/synthesis_pngs.py
+    # .parent -> paper_figures
+    # .parent -> scripts
+    # .parent -> mygeom (Project Root)
     return Path(__file__).resolve().parent.parent.parent
 
 def main():
@@ -16,15 +17,14 @@ def main():
     cgls_dir = root / "build" / "outputs" / "progressive_cgls"
     method_d_dir = root / "build" / "outputs" / "method_d_result"
     
-    # 出力ディレクトリ
-    out_dir = root / "images"
+    # 出力ディレクトリ (変更: build/outputs/paper_figures に保存)
+    out_dir = root / "build" / "outputs" / "paper_figures"
     out_dir.mkdir(parents=True, exist_ok=True)
     
     # 対象のIteration
     iters = [20, 40, 60, 80]
     
     # 図の作成 (4行 x 2列)
-    # figsizeは画像の縦横比に合わせて調整してください
     fig, axes = plt.subplots(len(iters), 2, figsize=(8, 12), dpi=200)
     
     # 列のタイトル (手法名)
@@ -43,7 +43,10 @@ def main():
             img = mpimg.imread(str(path_cgls))
             ax_cgls.imshow(img)
         else:
+            # 画像がない場合のプレースホルダー
             ax_cgls.text(0.5, 0.5, "Not Found", ha='center', va='center')
+            # 枠線を消して白い空白にする
+            ax_cgls.axis('off')
             print(f"[Warn] Missing: {path_cgls}")
 
         # --- 右列: 提案法 (Method D) ---
@@ -55,22 +58,21 @@ def main():
             ax_md.imshow(img)
         else:
             ax_md.text(0.5, 0.5, "Not Found", ha='center', va='center')
+            ax_md.axis('off')
             print(f"[Warn] Missing: {path_md}")
             
         # --- 行のラベル (Iteration数) ---
         # 左側のプロットのY軸ラベルとして表示
+        # 軸を消してもラベルだけ残すため、textで手動配置する方法もありますが、
+        # ここでは軸のTicksだけ消してラベルを残す方法をとります。
         ax_cgls.set_ylabel(f"Iter {it}", fontsize=14, fontweight='bold')
         
-        # --- 軸の装飾を消す ---
+        # --- 軸の装飾処理 ---
         for ax in axes[i]:
-            # 軸目盛りと枠線を消す（画像のみ表示）
+            # 目盛り(数字とヒゲ)を消す
             ax.set_xticks([])
             ax.set_yticks([])
-            # 枠線を消したい場合は以下を有効化
-            # ax.axis('off') 
-            # ただし axis('off') すると ylabel (Iter XX) も消えるため、
-            # 枠だけ残すか、テキストで配置する調整が必要です。
-            # ここでは目盛り(Ticks)だけ消して枠とラベルは残します。
+            # 枠線(Spines)は残るため、画像がくっきり分かれます
             
     plt.tight_layout()
     

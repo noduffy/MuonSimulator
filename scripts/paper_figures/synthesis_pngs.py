@@ -22,7 +22,7 @@ def main():
     out_dir = root / "build" / "outputs" / "paper_figures"
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    iters = [20, 40, 60, 80]
+    iters = [20, 50, 80]
     
     # 図の作成
     fig, axes = plt.subplots(len(iters), 2, figsize=(8, 12), dpi=200)

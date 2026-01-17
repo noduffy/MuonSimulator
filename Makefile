@@ -1,9 +1,10 @@
-.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps prob-map fusion all check
+.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps prob-map fusion all check evaluation
 
 # --- 設定変数 ---
-PY      ?= python3
-ITERS   ?= 200
-GRID3D  ?= configs/grid3d.yml
+PY       ?= python3
+GRID3D   ?= configs/grid3d.yml
+MAX_ITER ?= 80
+INTERVAL ?= 2
 
 # --- ディレクトリ定義 ---
 SRC_PRE   = scripts/preprocessing
@@ -47,7 +48,9 @@ cgls:
 	@echo "--- Building System Matrix ---"
 	@$(PY) $(SRC_REC)/build_system_matrix.py --input scattered_muons.csv --mode poca
 	@echo "--- Running Reconstruction ---"
-	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls
+	@$(PY) $(SRC_REC)/recon_cgls_3d_progressive.py --out_dir progressive_cgls \
+		--max_iter $(MAX_ITER) \
+		--interval $(INTERVAL)
 
 # ==============================================================================
 # 4. 手法C (Fusion / Probability Map)
@@ -71,7 +74,7 @@ prob-map:
 		--out_npy prob_map.npy \
 		--out_png prob_map_render.png
 
-# Step 3: 画像融合(図3) - Method C
+# Step 3: 画像融合(図3) - Method C  現在没案
 # 依存関係: cgls(Method A) と prob-map(Method B) が完了していること
 fusion:
 	@echo "--- Fusing Images (Method C) ---"
@@ -83,13 +86,13 @@ fusion:
 	@echo "[Done] Method C completed."
 
 # 手法D: 確率マップを事前情報として用いたCGLS
-method-d:
+method-d: make-maps prob-map
 	@echo "--- Running Method D (Constrained Reconstruction) ---"
 	@$(PY) scripts/reconstruction/recon_method_d.py \
 		--prob_map prob_map.npy \
 		--out_dir method_d_result \
-		--max_iter 100 \
-		--interval 10
+		--max_iter $(MAX_ITER) \
+		--interval $(INTERVAL)
 
 # ==============================================================================
 # ユーティリティ
@@ -98,8 +101,16 @@ clean-outputs:
 	@rm -rf build/outputs/*
 
 vis-setup:
-	@echo "--- Visualizing Simulation Setup ---"
-	@$(PY) scripts/visualization/visualize_setup_3d.py --out setup_render.png
+	@echo "--- Generating Ground Truth & Visualizing Setup ---"
+	@$(PY) scripts/visualization/visualize_setup_3d.py \
+		--out_img setup_render.png \
+		--out_npy true_density.npy
+
+evaluation:
+	@echo "Starting evaluation (Max Iter: $(MAX_ITER))..."
+	@$(PY) scripts/evaluation/evaluate_results.py \
+    --max_iter $(MAX_ITER) \
+    --interval $(INTERVAL)
 
 check:
 	@$(PY) scripts/inspect_x_values.py

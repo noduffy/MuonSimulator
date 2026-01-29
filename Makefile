@@ -3,8 +3,9 @@
 # --- 設定変数 ---
 PY       ?= python3
 GRID3D   ?= configs/grid3d.yml
-MAX_ITER ?= 80
+MAX_ITER ?= 200
 INTERVAL ?= 2
+LAMBDA   ?= 0.5
 
 # --- ディレクトリ定義 ---
 SRC_PRE   = scripts/preprocessing
@@ -86,13 +87,24 @@ fusion:
 	@echo "[Done] Method C completed."
 
 # 手法D: 確率マップを事前情報として用いたCGLS
-method-d: make-maps prob-map
+method-d: # make-maps prob-map
 	@echo "--- Running Method D (Constrained Reconstruction) ---"
 	@$(PY) scripts/reconstruction/recon_method_d.py \
 		--prob_map prob_map.npy \
 		--out_dir method_d_result \
 		--max_iter $(MAX_ITER) \
 		--interval $(INTERVAL)
+
+proposed:
+	@echo "--- Running Proposed (Spatially Regularized) ---"
+	@$(PY) scripts/reconstruction/recon_proposed.py \
+		--prob_map prob_map.npy \
+		--out_dir proposed_result \
+		--lam $(LAMBDA) \
+		--max_iter $(MAX_ITER) \
+		--interval $(INTERVAL) \
+		--nonneg
+
 
 # ==============================================================================
 # ユーティリティ

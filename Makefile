@@ -1,11 +1,13 @@
-.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps prob-map fusion all check evaluation
+.PHONY: build clean-build setting clean-outputs run make-csv cgls mix make-maps prob-map fusion all check setup evaluation
 
 # --- 設定変数 ---
-PY       ?= python3
-GRID3D   ?= configs/grid3d.yml
-MAX_ITER ?= 200
-INTERVAL ?= 2
-LAMBDA   ?= 0.5
+PY        ?= python3
+GRID3D    ?= configs/grid3d.yml
+THRESHOLD ?= 0.01
+MAX_ITER  ?= 200
+INTERVAL  ?= 2
+LAMBDA    ?= 0.1
+SIGMA     ?= 0.2
 
 # --- ディレクトリ定義 ---
 SRC_PRE   = scripts/preprocessing
@@ -31,8 +33,6 @@ build:
 run:
 	@cd build && ./mygeom ../macros/run.mac
 
-all: clean-build build run
-
 # ==============================================================================
 # 2. データ生成
 # ==============================================================================
@@ -40,7 +40,7 @@ make-csv:
 	@echo "--- Generating Pairs ---"
 	@$(PY) $(SRC_PRE)/generate_pairs.py --hit build/hits.csv --out pairs.csv
 	@echo "--- Separating Muons ---"
-	@$(PY) $(SRC_PRE)/separate_muons.py
+	@$(PY) $(SRC_PRE)/separate_muons.py --threshold $(THRESHOLD)
 
 # ==============================================================================
 # 3. 再構成 (通常手法)
@@ -87,7 +87,7 @@ fusion:
 	@echo "[Done] Method C completed."
 
 # 手法D: 確率マップを事前情報として用いたCGLS
-method-d: # make-maps prob-map
+method-d: make-maps prob-map
 	@echo "--- Running Method D (Constrained Reconstruction) ---"
 	@$(PY) scripts/reconstruction/recon_method_d.py \
 		--prob_map prob_map.npy \
@@ -95,7 +95,7 @@ method-d: # make-maps prob-map
 		--max_iter $(MAX_ITER) \
 		--interval $(INTERVAL)
 
-proposed:
+proposed:# make-maps prob-map
 	@echo "--- Running Proposed (Spatially Regularized) ---"
 	@$(PY) scripts/reconstruction/recon_proposed.py \
 		--prob_map prob_map.npy \
@@ -112,13 +112,13 @@ proposed:
 clean-outputs:
 	@rm -rf build/outputs/*
 
-vis-setup:
+setup:
 	@echo "--- Generating Ground Truth & Visualizing Setup ---"
 	@$(PY) scripts/visualization/visualize_setup_3d.py \
 		--out_img setup_render.png \
 		--out_npy true_density.npy
 
-evaluation:
+evaluation: setup
 	@echo "Starting evaluation (Max Iter: $(MAX_ITER))..."
 	@$(PY) scripts/evaluation/evaluate_results.py \
     --max_iter $(MAX_ITER) \
@@ -126,3 +126,15 @@ evaluation:
 
 check:
 	@$(PY) scripts/inspect_x_values.py
+
+smoothing:
+	@echo "--- Smoothing Start ---"
+	@$(PY) scripts/visualization/compare_smoothing.py --sigma $(SIGMA)
+#	@$(PY) scripts/visualization/compare_smoothing.py --sigma_zyx 0.8 0.2 0.2
+
+make-graph:
+	@echo "--- Making graph ---"
+	@$(PY) scripts/paper_figures/synthesis_pngs.py
+
+
+all: clean-build build run make-csv cgls method-d smoothing setup evaluation

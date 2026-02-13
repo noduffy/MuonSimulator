@@ -41,7 +41,7 @@ def save_snapshot_d(x_vector, nx, ny, nz, ranges, iteration, out_file):
   ax.set_box_aspect((xmax-xmin, ymax-ymin, zmax-zmin))
   
   # 視点
-  ax.view_init(elev=22, azim=-60)
+  ax.view_init(elev=15, azim=-60)
   
   ax.set_title(f"Method D: Iteration {iteration:04d}\n(Prior-constrained CGLS)")
   

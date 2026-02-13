@@ -5,9 +5,16 @@ import matplotlib
 matplotlib.use("Agg") # 画面表示がない環境用
 import matplotlib.pyplot as plt
 from pathlib import Path
+import argparse
+import sys
 
 # --- 設定値 ---
-SCATTERING_ANGLE_THRESHOLD_RAD = 0.01 #閾値はさまざまな値に変更して実験している
+# コマンドライン引数から取得するように変更
+parser = argparse.ArgumentParser()
+parser.add_argument('--threshold', type=float, default=0.02)
+args = parser.parse_args()
+
+SCATTERING_ANGLE_THRESHOLD_RAD = args.threshold
 # ----------------
 
 def calculate_scattering_angle(df):
@@ -46,7 +53,7 @@ def main():
     input_path = Path('build/outputs/pairs.csv')
     if not input_path.exists():
         print(f"エラー: {input_path} が見つかりません。")
-        return
+        sys.exit(1)
 
     print("--- 1. データの読み込みと散乱角計算 ---")
     df = pd.read_csv(input_path)

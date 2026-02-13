@@ -95,7 +95,7 @@ def save_snapshot(x_vector, nx, ny, nz, ranges, iteration, out_file, z_detectors
   ax.set_xlim(xmin, xmax); ax.set_ylim(ymin, ymax); ax.set_zlim(zmin, zmax)
   ax.set_xlabel("X [mm]"); ax.set_ylabel("Y [mm]"); ax.set_zlabel("Z [mm]")
   ax.set_box_aspect((xmax-xmin, ymax-ymin, zmax-zmin))
-  ax.view_init(elev=22, azim=-60)
+  ax.view_init(elev=15, azim=-60)
   
   # タイトル
   ax.set_title(f"Iteration {iteration:04d} (low≈{lvL:.3g}, high≈{lvH:.3g})")

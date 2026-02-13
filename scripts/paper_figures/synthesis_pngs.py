@@ -15,8 +15,8 @@ def main():
     root = get_project_root()
     
     # 入力ディレクトリ
-    cgls_dir = root / "build" / "outputs" / "progressive_cgls"
-    method_d_dir = root / "build" / "outputs" / "method_d_result"
+    cgls_dir = root / "build" / "outputs" / "progressive_cgls" / "smoothed_sigma_zyx_0.2_0.2_0.2"
+    method_d_dir = root / "build" / "outputs" / "method_d_result" / "smoothed_sigma_zyx_0.2_0.2_0.2"
     
     # 出力ディレクトリ
     out_dir = root / "build" / "outputs" / "paper_figures"

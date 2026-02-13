@@ -1,10 +1,16 @@
 # configs/grid3d.yml
-nx: 40
-ny: 40
-nz: 30
+nx: 150
+ny: 150
+nz: 150
 x_min: -150.0
 x_max:  150.0
 y_min: -150.0
 y_max:  150.0
 z_min:  -80.0
 z_max:   80.0
+
+# 追加する共通パラメータ
+pb_count: 1
+pb_hollow: 1
+outer_half: 20.0 # 20.0
+inner_half: 16
